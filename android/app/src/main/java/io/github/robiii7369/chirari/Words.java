@@ -105,7 +105,7 @@ final class Words {
         return readString(ctx, "chirari:pack", "konbini");
     }
 
-    private static String readString(Context ctx, String key, String fallback) {
+    static String readString(Context ctx, String key, String fallback) {
         try {
             String raw = prefs(ctx).getString(key, null);
             if (raw == null) return fallback;

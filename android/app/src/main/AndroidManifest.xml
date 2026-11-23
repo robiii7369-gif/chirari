@@ -6,6 +6,9 @@
     <!-- Word on lock screen: a quiet notification, refreshed every hour and after a restart -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Keeps the lock-screen card up and notices when the phone is locked (for "new word every lock") -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
     <!-- TextToSpeech engines must be visible to the app on Android 11+ -->
     <queries>
@@ -37,6 +40,15 @@
             android:name=".BgProvider"
             android:authorities="io.github.robiii7369.chirari.bg"
             android:exported="true" />
+
+        <service
+            android:name=".WordService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Shows the user's current vocabulary word on the lock screen and changes it each time the phone is locked" />
+        </service>
 
         <receiver
             android:name=".WordWidget"

@@ -16,18 +16,16 @@ import android.view.View;
 import android.widget.RemoteViews;
 
 import java.io.File;
-import java.util.List;
 import java.util.Locale;
 
 /**
- * Home-screen widget: one word every hour.
+ * Home-screen widget: shows the current word (WordClock decides when it changes).
  * Tap the word to open it, 🔊 to open it and hear it, › for the next word.
  * Background: one of five designs, or the user's own photo (chosen in the app's Style screen).
  */
 public class WordWidget extends AppWidgetProvider {
     static final String ACTION_NEXT = "io.github.robiii7369.chirari.NEXT_WORD";
     static final String ACTION_TICK = "io.github.robiii7369.chirari.HOURLY";
-    private static final long HOUR_MS = 60L * 60L * 1000L;
 
     /** Background design: drawable + whether it is light (needs dark text). */
     private static final class Style {
@@ -53,14 +51,17 @@ public class WordWidget extends AppWidgetProvider {
     @Override
     public void onReceive(Context context, Intent intent) {
         if (ACTION_NEXT.equals(intent.getAction())) {
-            int offset = Words.prefs(context).getInt("widget:offset", 0);
-            Words.prefs(context).edit().putInt("widget:offset", offset + 1).apply();
-            updateAll(context);
+            WordClock.advance(context, false);
             return;
         }
         String a = intent.getAction();
-        if (ACTION_TICK.equals(a) || Intent.ACTION_BOOT_COMPLETED.equals(a) || Intent.ACTION_MY_PACKAGE_REPLACED.equals(a)) {
-            if (!ACTION_TICK.equals(a)) LockWord.schedule(context); // alarms are cleared by a restart
+        if (ACTION_TICK.equals(a)) {
+            WordClock.tick(context);
+            return;
+        }
+        if (Intent.ACTION_BOOT_COMPLETED.equals(a) || Intent.ACTION_MY_PACKAGE_REPLACED.equals(a)) {
+            WordClock.schedule(context); // timers are cleared by a restart
+            LockWord.ensureRunning(context);
             updateAll(context);
             return;
         }
@@ -73,13 +74,11 @@ public class WordWidget extends AppWidgetProvider {
         int[] ids = manager.getAppWidgetIds(new ComponentName(context, WordWidget.class));
         for (int id : ids) draw(context, manager, id);
         LockWord.refresh(context);
+        WordClock.recordShown(context, WordClock.current(context));
     }
 
     static Words.Word currentWord(Context context) {
-        List<Words.Word> list = Words.rotation(context);
-        if (list.isEmpty()) return null;
-        long slot = System.currentTimeMillis() / HOUR_MS + Words.prefs(context).getInt("widget:offset", 0);
-        return list.get((int) Math.floorMod(slot, (long) list.size()));
+        return WordClock.current(context);
     }
 
     /** Mark text as Japanese so kanji use Japanese letter shapes even when the phone is set to English. */

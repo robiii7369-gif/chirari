@@ -1,6 +1,5 @@
 package io.github.robiii7369.chirari;
 
-import android.app.AlarmManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -14,11 +13,11 @@ import android.text.SpannableStringBuilder;
 /**
  * "Word on lock screen" for Android phones, which (mostly) don't allow widgets on the lock screen:
  * a quiet notification that shows the current word, with 🔊 Listen and › Next buttons.
- * No sound, no vibration, no pop-up. It changes every hour together with the home-screen widget.
+ * No sound, no vibration, no pop-up. It changes together with the home-screen widget.
  */
 final class LockWord {
     private static final String CHANNEL = "word_lock";
-    private static final int NOTIFICATION_ID = 1;
+    static final int NOTIFICATION_ID = 1;
     private static final String PREF_ON = "lockword:on";
 
     private LockWord() { }
@@ -30,33 +29,26 @@ final class LockWord {
     static void setOn(Context ctx, boolean on) {
         Words.prefs(ctx).edit().putBoolean(PREF_ON, on).apply();
         if (on) {
-            schedule(ctx);
+            ensureRunning(ctx);
             refresh(ctx);
         } else {
+            ctx.stopService(new Intent(ctx, WordService.class));
             nm(ctx).cancel(NOTIFICATION_ID);
-            alarm(ctx).cancel(tick(ctx));
+        }
+    }
+
+    /** Starts the helper that keeps the card up and notices when the phone is locked. */
+    static void ensureRunning(Context ctx) {
+        if (!isOn(ctx)) return;
+        try {
+            ctx.startForegroundService(new Intent(ctx, WordService.class));
+        } catch (Exception e) {
+            refresh(ctx); // Android didn't allow starting it right now: still show the card
         }
     }
 
     private static NotificationManager nm(Context ctx) {
         return (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
-    }
-
-    private static AlarmManager alarm(Context ctx) {
-        return (AlarmManager) ctx.getSystemService(Context.ALARM_SERVICE);
-    }
-
-    private static PendingIntent tick(Context ctx) {
-        Intent i = new Intent(ctx, WordWidget.class).setAction(WordWidget.ACTION_TICK);
-        return PendingIntent.getBroadcast(ctx, 2, i, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-    }
-
-    /** Wake up shortly after every full hour (when the word changes) to refresh the lock-screen word. */
-    static void schedule(Context ctx) {
-        if (!isOn(ctx)) return;
-        long hour = AlarmManager.INTERVAL_HOUR;
-        long next = (System.currentTimeMillis() / hour + 1) * hour + 20_000L;
-        alarm(ctx).setInexactRepeating(AlarmManager.RTC, next, hour, tick(ctx));
     }
 
     private static void ensureChannel(Context ctx) {
@@ -76,9 +68,22 @@ final class LockWord {
     static void refresh(Context ctx) {
         if (!isOn(ctx)) return;
         try {
+            Notification n = build(ctx);
+            if (n != null) nm(ctx).notify(NOTIFICATION_ID, n);
+        } catch (Exception ignored) {
+            // e.g. notifications switched off: nothing to show
+        }
+    }
+
+    /** The lock-screen card for the current word. */
+    static Notification build(Context ctx) {
             Words.Word w = WordWidget.currentWord(ctx);
-            if (w == null) { nm(ctx).cancel(NOTIFICATION_ID); return; }
             ensureChannel(ctx);
+            if (w == null) {
+                return new Notification.Builder(ctx, CHANNEL).setSmallIcon(R.drawable.ic_stat_word)
+                        .setContentTitle("Chirari").setContentText("Open the app to choose your words")
+                        .setOngoing(true).setVisibility(Notification.VISIBILITY_PUBLIC).build();
+            }
             String lang = Words.lang(ctx);
 
             SpannableStringBuilder title = new SpannableStringBuilder();
@@ -109,9 +114,6 @@ final class LockWord {
                     .setShowWhen(false)
                     .setCategory(Notification.CATEGORY_STATUS)
                     .build();
-            nm(ctx).notify(NOTIFICATION_ID, n);
-        } catch (Exception ignored) {
-            // e.g. notifications switched off: nothing to show
-        }
+            return n;
     }
 }

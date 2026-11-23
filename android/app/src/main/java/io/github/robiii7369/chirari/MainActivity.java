@@ -50,6 +50,7 @@ public class MainActivity extends Activity {
     private String pendingSpeech = null;
     private volatile String photoThumbCache = null;
     private boolean updateOffered = false;
+    private boolean leavingForTask = false; // photo picker / settings: not "closing the app"
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -103,7 +104,8 @@ public class MainActivity extends Activity {
             }
         });
 
-        LockWord.schedule(this);
+        WordClock.schedule(this);
+        LockWord.ensureRunning(this);
 
         Intent i = getIntent();
         int wordId = i.getIntExtra(EXTRA_WORD_ID, -1);
@@ -140,6 +142,8 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        leavingForTask = false;
+        if (web != null) web.evaluateJavascript("window.onWordChanged && window.onWordChanged()", null);
         checkForUpdates();
     }
 
@@ -175,6 +179,13 @@ public class MainActivity extends Activity {
                 }
             });
         }).start();
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        // "New word every lock" also gives a new word each time the user closes the app
+        if (!isChangingConfigurations() && !leavingForTask) WordClock.onAppClosed(this);
     }
 
     @Override
@@ -222,6 +233,7 @@ public class MainActivity extends Activity {
     }
 
     private void openNotificationSettings() {
+        leavingForTask = true;
         Toast.makeText(this, "Turn on notifications for Chirari, then try again", Toast.LENGTH_LONG).show();
         try {
             startActivity(new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
@@ -379,11 +391,44 @@ public class MainActivity extends Activity {
                 pick.addCategory(Intent.CATEGORY_OPENABLE);
                 pick.setType("image/*");
                 try {
+                    leavingForTask = true;
                     startActivityForResult(pick, PICK_PHOTO);
                 } catch (Exception e) {
                     Toast.makeText(MainActivity.this, "No photo app found", Toast.LENGTH_LONG).show();
                 }
             });
+        }
+
+        @JavascriptInterface
+        public int getCurrentWordId() {
+            Words.Word w = WordClock.current(MainActivity.this);
+            return w == null ? 0 : w.id;
+        }
+
+        @JavascriptInterface
+        public int nextWord() {
+            WordClock.advance(MainActivity.this, false);
+            return getCurrentWordId();
+        }
+
+        @JavascriptInterface
+        public String getHistory() {
+            return WordClock.history(MainActivity.this);
+        }
+
+        @JavascriptInterface
+        public void clearHistory() {
+            WordClock.clearHistory(MainActivity.this);
+        }
+
+        @JavascriptInterface
+        public String getChangeMode() {
+            return WordClock.mode(MainActivity.this);
+        }
+
+        @JavascriptInterface
+        public void setChangeMode(String mode) {
+            WordClock.setMode(MainActivity.this, mode);
         }
 
         @JavascriptInterface

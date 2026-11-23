@@ -82,6 +82,20 @@
   .switch::after{content:"";position:absolute;left:3px;top:3px;width:26px;height:26px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .2s}
   .switch[aria-checked="true"]{background:var(--nori2)}
   .switch[aria-checked="true"]::after{transform:translateX(20px)}
+  .seg{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;background:var(--rice);border:1px solid var(--line);border-radius:14px;padding:4px;margin-top:8px}
+  .seg button{border:0;background:transparent;border-radius:10px;padding:9px 4px;font-size:13px;font-weight:700;color:var(--muted);line-height:1.25}
+  .seg button small{display:block;font-size:10.5px;font-weight:600;margin-top:1px}
+  .seg button.sel{background:var(--card);color:var(--nori);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+  .seg-note{font-size:12.5px;color:var(--muted);line-height:1.5;margin-top:8px}
+  .hist{list-style:none;margin:4px 0 0;padding:0}
+  .hist li{display:flex;align-items:center;gap:12px;padding:10px 2px;border-top:1px solid var(--line);cursor:pointer}
+  .hist li:first-child{border-top:0}
+  .hist .hw{font-family:var(--jp);font-size:18px;font-weight:700;min-width:0}
+  .hist .hk{font-family:var(--jp);font-size:11.5px;color:var(--muted);font-weight:500;margin-left:6px}
+  .hist .hm{font-size:12.5px;color:#374151;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .hist .ht{margin-left:auto;flex:none;font-size:11.5px;color:var(--muted);text-align:right}
+  .hist .now{color:var(--ume);font-weight:800}
+  .linkbtn{border:0;background:none;color:var(--nori);font-weight:700;font-size:12.5px;padding:4px 0}
   .settings-note{font-size:12.5px;color:var(--muted);line-height:1.6;margin:0 0 10px}
   .screen .hint{position:absolute;bottom:22px;font-size:12px;opacity:.7}
 
@@ -221,12 +235,13 @@
         <div class="hint">Tap the word to open it</div>
       </div>
     </div>
-    <div class="toggle"><span>Demo mode: new word every 10 seconds<br><small style="color:var(--muted)">Real app: every 1–3 hours, your choice</small></span><button class="switch on" id="demoSwitch" aria-label="Demo mode"></button></div>
+    <div class="toggle"><span>Demo mode: new word every 10 seconds<br><small style="color:var(--muted)">Real app: every lock, every 5 minutes or every hour, your choice</small></span><button class="switch on" id="demoSwitch" aria-label="Demo mode"></button></div>
     <div class="row" style="margin-bottom:24px">
       <button class="btn ghost" id="nextBtn">Next word →</button>
       <button class="btn" id="openBtn">Open this word</button>
     </div>
-    <div class="box" id="androidCard" style="margin:-8px 0 24px"></div>
+    <div class="box" id="androidCard" style="margin:-8px 0 16px"></div>
+    <div class="box" id="historyBox" style="margin:0 0 24px"></div>
   </section>
 
   <!-- SEARCH TAB -->
@@ -423,8 +438,10 @@ function rotation(){
   const ids = state.saved.filter(id => byId(id));
   return ids.length ? ids.map(byId) : packWords();
 }
+const HAS_CLOCK = !!(NATIVE && typeof NATIVE.getCurrentWordId === "function"); // Android app 0.5+: the real widget decides
 function currentWord(){
   const r = rotation();
+  if(HAS_CLOCK){ try{ const w = byId(NATIVE.getCurrentWordId()); if(w) return w; }catch(e){} }
   return r[state.idx % r.length];
 }
 function renderWidget(animate){
@@ -435,11 +452,59 @@ function renderWidget(animate){
     $("#wKana").innerHTML = `<span lang="ja">${esc(w.kana !== w.word ? w.kana : w.romaji)}</span> <span class="pos" lang="${L()}">(${esc(posLabel(w))})</span>`;
     const m = $("#wMean"); m.textContent = meaning(w); m.setAttribute("lang", L());
     $("#wPack").textContent = state.saved.length ? "My words" : packName(state.pack);
+    recordWeb(w);
+    setTimeout(renderHistory, HAS_CLOCK ? 150 : 0);
   };
   if(animate){ el.classList.add("fade"); setTimeout(() => { paint(); el.classList.remove("fade"); }, 300); }
   else paint();
 }
-function nextWord(){ state.idx++; renderWidget(true); }
+function nextWord(){
+  if(HAS_CLOCK){ try{ NATIVE.nextWord(); }catch(e){} } else state.idx++;
+  renderWidget(true);
+}
+
+/* ---------- history: words that were on the widget ---------- */
+function getHistory(){
+  if(HAS_CLOCK){ try{ return JSON.parse(NATIVE.getHistory() || "[]"); }catch(e){ return []; } }
+  return store.get("history", []);
+}
+function recordWeb(w){
+  if(HAS_CLOCK || !w) return;
+  const h = store.get("history", []);
+  if(h.length && h[0][0] === w.id) return;
+  h.unshift([w.id, Date.now()]); store.set("history", h.slice(0, 50));
+}
+function ago(t){
+  const s = Math.round((Date.now() - t) / 1000);
+  if(s < 60) return "just now";
+  if(s < 3600) return Math.floor(s / 60) + " min ago";
+  const d = new Date(t), now = new Date();
+  const hm = d.getHours() + ":" + String(d.getMinutes()).padStart(2, "0");
+  if(d.toDateString() === now.toDateString()) return "today " + hm;
+  const y = new Date(now); y.setDate(now.getDate() - 1);
+  if(d.toDateString() === y.toDateString()) return "yesterday " + hm;
+  return d.toLocaleDateString("en-US", {month: "short", day: "numeric"}) + " " + hm;
+}
+let histAll = false;
+function renderHistory(){
+  const box = $("#historyBox"); if(!box) return;
+  const h = getHistory().filter(x => byId(x[0]));
+  const rows = (histAll ? h : h.slice(0, 8)).map(([id, t], i) => {
+    const w = byId(id);
+    return `<li data-hist="${id}"><div style="min-width:0;flex:1"><div><span class="hw" lang="ja">${esc(w.word)}</span>${w.kana !== w.word ? `<span class="hk" lang="ja">${esc(w.kana)}</span>` : ""}</div>
+      <div class="hm" lang="${L()}">${esc(meaning(w))}</div></div><div class="ht ${i === 0 ? "now" : ""}">${i === 0 ? "on now" : esc(ago(t))}</div></li>`;
+  }).join("");
+  box.innerHTML = `<div class="lbl"><span>Recent words</span>${h.length > 1 ? '<button class="linkbtn" id="histClear">Clear</button>' : ""}</div>
+    ${h.length ? `<ul class="hist">${rows}</ul>` : `<div class="seg-note">Words you see on your widget will appear here.</div>`}
+    ${h.length > 8 ? `<button class="linkbtn" id="histMore">${histAll ? "Show less" : `Show all ${h.length}`}</button>` : ""}`;
+  box.querySelectorAll("[data-hist]").forEach(li => li.onclick = () => openWord(+li.dataset.hist));
+  const more = $("#histMore"); if(more) more.onclick = () => { histAll = !histAll; renderHistory(); };
+  const clr = $("#histClear"); if(clr) clr.onclick = () => {
+    if(HAS_CLOCK){ try{ NATIVE.clearHistory(); }catch(e){} } else store.set("history", []);
+    recordWeb(currentWord()); renderHistory();
+  };
+}
+window.onWordChanged = () => { renderWidget(false); renderHistory(); };
 
 let demoTimer = null;
 function setDemo(on){
@@ -748,15 +813,43 @@ tickClock(); setInterval(tickClock, 15000);
 renderBadge(); applyLang(); applyBg(); setDemo(true);
 const HAS_LOCK = !!(NATIVE && typeof NATIVE.setLockWord === "function"); // older app versions don't have it
 $("#androidCard").innerHTML = NATIVE
-  ? `<div class="lbl"><span>Your real widget</span></div><div style="font-size:14px;line-height:1.6">Long-press your home screen → <b>Widgets</b> → <b>Chirari</b>, and drag it onto your home screen. It shows a new word every hour. Tap <b>›</b> on the widget for the next word.</div>`
+  ? `<div class="lbl"><span>Your real widget</span></div><div style="font-size:14px;line-height:1.6">Long-press your home screen → <b>Widgets</b> → <b>Chirari</b>, and drag it onto your home screen. Tap <b>›</b> on the widget for the next word.</div>`
+    + (HAS_CLOCK ? `<div class="lockrow" style="display:block"><div class="lt"><b>🔄 New word</b></div>
+        <div class="seg" id="modeSeg" role="radiogroup" aria-label="When the word changes">
+          <button data-mode="lock" role="radio">🔒 Every lock<small>or app close</small></button>
+          <button data-mode="5min" role="radio">⏱ 5 minutes</button>
+          <button data-mode="hour" role="radio">🕐 1 hour</button>
+        </div><div class="seg-note" id="modeNote"></div></div>` : "")
     + (HAS_LOCK ? `<div class="lockrow"><div class="lt"><b>🔒 Word on lock screen</b><span>See your word every time you pick up your phone. Silent, no pop-ups. 🔊 to hear it, › for the next one.</span></div><button class="switch" id="lockSw" role="switch" aria-checked="false" aria-label="Word on lock screen"></button></div>` : "")
   : `<div class="lbl"><span>Android app (test version)</span></div><div style="font-size:14px;line-height:1.6;margin-bottom:10px">Get the real home-screen widget on your Android phone.</div><a class="btn" style="display:block;text-align:center;text-decoration:none" href="${APK_URL}">📲 Download for Android</a><div style="font-size:12px;color:var(--muted);margin-top:8px">Android asks before installing apps from outside the Play Store. iPhone: keep using this page.</div>`;
 if(HAS_LOCK){
   const sw = $("#lockSw");
   try{ sw.setAttribute("aria-checked", NATIVE.isLockWordOn() ? "true" : "false"); }catch(e){}
   sw.onclick = () => { try{ NATIVE.setLockWord(sw.getAttribute("aria-checked") !== "true"); }catch(e){ toast("Couldn't change this setting"); } };
-  window.onLockWord = on => sw.setAttribute("aria-checked", on ? "true" : "false");
+  window.onLockWord = on => { sw.setAttribute("aria-checked", on ? "true" : "false"); renderMode(); };
 }
+function renderMode(){
+  if(!HAS_CLOCK) return;
+  let m = "lock"; try{ m = NATIVE.getChangeMode(); }catch(e){}
+  document.querySelectorAll("#modeSeg [data-mode]").forEach(b => { b.classList.toggle("sel", b.dataset.mode === m); b.setAttribute("aria-checked", b.dataset.mode === m); });
+  let lockOn = false; try{ lockOn = NATIVE.isLockWordOn(); }catch(e){}
+  $("#modeNote").innerHTML = m === "lock"
+    ? (lockOn ? "A new word every time you lock your phone or close Chirari."
+              : "Turn on <b>Word on lock screen</b> below so Chirari can tell when you lock your phone. Until then: a new word when you close Chirari, and every hour.")
+    : m === "5min" ? "A new word every 5 minutes while you use your phone." : "A new word every hour.";
+}
+if(HAS_CLOCK){
+  document.querySelectorAll("#modeSeg [data-mode]").forEach(b => b.onclick = () => {
+    try{ NATIVE.setChangeMode(b.dataset.mode); }catch(e){}
+    if(b.dataset.mode === "lock" && HAS_LOCK){ try{ if(!NATIVE.isLockWordOn()) NATIVE.setLockWord(true); }catch(e){} }
+    renderMode();
+  });
+  renderMode();
+  // the real widget is in charge: no 10-second demo
+  setDemo(false);
+  const t = $("#demoSwitch") && $("#demoSwitch").closest(".toggle"); if(t) t.style.display = "none";
+}
+renderHistory();
 function openFromHash(){
   const m = /[#&]w=(\d+)/.exec(location.hash || "");
   if(m && state.lang && byId(+m[1])){
