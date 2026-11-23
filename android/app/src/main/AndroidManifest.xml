@@ -26,6 +26,12 @@
             </intent-filter>
         </activity>
 
+        <!-- Lets the launcher show the user's chosen widget photo (read-only, bg_*.jpg only) -->
+        <provider
+            android:name=".BgProvider"
+            android:authorities="io.github.robiii7369.chirari.bg"
+            android:exported="true" />
+
         <receiver
             android:name=".WordWidget"
             android:exported="true"

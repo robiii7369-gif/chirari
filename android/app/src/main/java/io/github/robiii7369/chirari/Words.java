@@ -24,7 +24,7 @@ final class Words {
 
     static final class Word {
         int id;
-        String pack, word, kana, romaji;
+        String pack, word, kana, romaji, type;
         JSONObject meaning;
 
         String meaningIn(String lang) {
@@ -56,6 +56,7 @@ final class Words {
                     w.word = o.optString("word");
                     w.kana = o.optString("kana");
                     w.romaji = o.optString("romaji");
+                    w.type = o.optString("type", "noun");
                     w.meaning = o.getJSONObject("meaning");
                     list.add(w);
                 }
@@ -74,6 +75,28 @@ final class Words {
     /** Values are stored by the web app as JSON text, e.g. "\"ne\"" or "[19,28]". */
     static String lang(Context ctx) {
         return readString(ctx, "chirari:lang", "en");
+    }
+
+    static String bg(Context ctx) {
+        return readString(ctx, "chirari:bg", "nori");
+    }
+
+    /** Part of speech in the user's language (non-English labels are drafts for a native-speaker check). */
+    static String posLabel(String type, String lang) {
+        String[] l; // en, vi, my, ne
+        switch (type) {
+            case "verb": l = new String[]{"verb", "động từ", "ကြိယာ", "क्रिया"}; break;
+            case "i-adjective": l = new String[]{"い-adjective", "tính từ đuôi い", "い-နာမဝိသေသန", "い-विशेषण"}; break;
+            case "na-adjective": l = new String[]{"な-adjective", "tính từ đuôi な", "な-နာမဝိသေသန", "な-विशेषण"}; break;
+            case "phrase": l = new String[]{"phrase", "cụm từ", "စကားစု", "वाक्यांश"}; break;
+            default: l = new String[]{"noun", "danh từ", "နာမ်", "संज्ञा"};
+        }
+        switch (lang) {
+            case "vi": return l[1];
+            case "my": return l[2];
+            case "ne": return l[3];
+            default: return l[0];
+        }
     }
 
     static String pack(Context ctx) {
