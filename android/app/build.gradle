@@ -14,7 +14,21 @@ android {
         versionName '0.1-test'
     }
 
+    // Fixed test key, so a new build installs over the old one.
+    // Test builds only: a Play Store release must use a private key kept out of this public repo.
+    signingConfigs {
+        test {
+            storeFile file('chirari-test.keystore')
+            storePassword 'chirari-test'
+            keyAlias 'chirari'
+            keyPassword 'chirari-test'
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig signingConfigs.test
+        }
         release {
             minifyEnabled false
         }

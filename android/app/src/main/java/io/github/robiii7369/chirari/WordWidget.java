@@ -6,6 +6,9 @@ import android.appwidget.AppWidgetProvider;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.text.SpannableString;
+import android.text.Spanned;
+import android.text.style.LocaleSpan;
 import android.widget.RemoteViews;
 
 import java.util.List;
@@ -49,6 +52,13 @@ public class WordWidget extends AppWidgetProvider {
         return list.get((int) Math.floorMod(slot, (long) list.size()));
     }
 
+    /** Mark text as Japanese so kanji use Japanese letter shapes even when the phone is set to English. */
+    private static CharSequence japanese(String text) {
+        SpannableString s = new SpannableString(text);
+        s.setSpan(new LocaleSpan(Locale.JAPAN), 0, text.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        return s;
+    }
+
     private static void draw(Context context, AppWidgetManager manager, int widgetId) {
         RemoteViews views = new RemoteViews(context.getPackageName(), R.layout.widget_word);
         Words.Word w = currentWord(context);
@@ -56,14 +66,14 @@ public class WordWidget extends AppWidgetProvider {
 
         if (w == null) {
             views.setTextViewText(R.id.widget_pack, "CHIRARI");
-            views.setTextViewText(R.id.widget_word, "ちらり");
+            views.setTextViewText(R.id.widget_word, japanese("ちらり"));
             views.setTextViewText(R.id.widget_kana, "");
             views.setTextViewText(R.id.widget_meaning, "Open the app to choose your words");
         } else {
             String label = Words.usingSaved(context) ? "My words" : Words.packName(w.pack);
             views.setTextViewText(R.id.widget_pack, label.toUpperCase(Locale.ROOT));
-            views.setTextViewText(R.id.widget_word, w.word);
-            views.setTextViewText(R.id.widget_kana, w.kana.equals(w.word) ? w.romaji : w.kana);
+            views.setTextViewText(R.id.widget_word, japanese(w.word));
+            views.setTextViewText(R.id.widget_kana, w.kana.equals(w.word) ? w.romaji : japanese(w.kana));
             views.setTextViewText(R.id.widget_meaning, w.meaningIn(lang));
         }
 
