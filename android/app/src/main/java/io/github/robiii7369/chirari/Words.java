@@ -1,0 +1,139 @@
+package io.github.robiii7369.chirari;
+
+import android.content.Context;
+import android.content.SharedPreferences;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+import org.json.JSONTokener;
+
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Reads the word list straight out of assets/index.html (the same file as the web app),
+ * so the widget and the app always use the same 230 words.
+ */
+final class Words {
+    static final String PREFS = "chirari";
+
+    static final class Word {
+        int id;
+        String pack, word, kana, romaji;
+        JSONObject meaning;
+
+        String meaningIn(String lang) {
+            String m = meaning.optString(lang, "");
+            return m.isEmpty() ? meaning.optString("en", "") : m;
+        }
+    }
+
+    private static List<Word> cache;
+
+    static synchronized List<Word> all(Context ctx) {
+        if (cache != null) return cache;
+        List<Word> list = new ArrayList<>();
+        try (InputStream in = ctx.getAssets().open("index.html")) {
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            byte[] buf = new byte[16384];
+            int n;
+            while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+            String html = new String(out.toByteArray(), StandardCharsets.UTF_8);
+            String marker = "const WORDS = ";
+            int start = html.indexOf(marker);
+            if (start >= 0) {
+                JSONArray arr = (JSONArray) new JSONTokener(html.substring(start + marker.length())).nextValue();
+                for (int i = 0; i < arr.length(); i++) {
+                    JSONObject o = arr.getJSONObject(i);
+                    Word w = new Word();
+                    w.id = o.getInt("id");
+                    w.pack = o.optString("pack", "konbini");
+                    w.word = o.optString("word");
+                    w.kana = o.optString("kana");
+                    w.romaji = o.optString("romaji");
+                    w.meaning = o.getJSONObject("meaning");
+                    list.add(w);
+                }
+            }
+        } catch (Exception e) {
+            // keep an empty list; the widget shows a friendly message instead
+        }
+        cache = list;
+        return list;
+    }
+
+    static SharedPreferences prefs(Context ctx) {
+        return ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+    }
+
+    /** Values are stored by the web app as JSON text, e.g. "\"ne\"" or "[19,28]". */
+    static String lang(Context ctx) {
+        return readString(ctx, "chirari:lang", "en");
+    }
+
+    static String pack(Context ctx) {
+        return readString(ctx, "chirari:pack", "konbini");
+    }
+
+    private static String readString(Context ctx, String key, String fallback) {
+        try {
+            String raw = prefs(ctx).getString(key, null);
+            if (raw == null) return fallback;
+            Object v = new JSONTokener(raw).nextValue();
+            return (v instanceof String && !((String) v).isEmpty()) ? (String) v : fallback;
+        } catch (Exception e) {
+            return fallback;
+        }
+    }
+
+    /** Words the widget rotates through: the user's starred words, or else the chosen pack. */
+    static List<Word> rotation(Context ctx) {
+        List<Word> all = all(ctx);
+        Map<Integer, Word> byId = new HashMap<>();
+        for (Word w : all) byId.put(w.id, w);
+
+        List<Word> saved = new ArrayList<>();
+        try {
+            String raw = prefs(ctx).getString("chirari:saved", null);
+            if (raw != null) {
+                JSONArray ids = new JSONArray(raw);
+                for (int i = 0; i < ids.length(); i++) {
+                    Word w = byId.get(ids.optInt(i, -1));
+                    if (w != null) saved.add(w);
+                }
+            }
+        } catch (Exception ignored) { }
+        if (!saved.isEmpty()) return saved;
+
+        String pack = pack(ctx);
+        List<Word> inPack = new ArrayList<>();
+        for (Word w : all) if (pack.equals(w.pack)) inPack.add(w);
+        return inPack.isEmpty() ? all : inPack;
+    }
+
+    static boolean usingSaved(Context ctx) {
+        try {
+            String raw = prefs(ctx).getString("chirari:saved", null);
+            return raw != null && new JSONArray(raw).length() > 0;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    static String packName(String pack) {
+        switch (pack) {
+            case "hotel": return "Hotel";
+            case "factory": return "Factory";
+            case "daily": return "Daily Life";
+            case "care": return "Care work";
+            default: return "Konbini & Retail";
+        }
+    }
+
+    private Words() { }
+}

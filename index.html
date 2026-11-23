@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#1F3A33">
 <title>Chirari ちらり — Learn Japanese at a glance</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E%F0%9F%8D%99%3C/text%3E%3C/svg%3E">
 <style>
   :root{
     --rice:#FBF7F0; --card:#FFFFFF; --ink:#1E2430; --muted:#6B7280; --line:#E8E1D5;
@@ -164,6 +165,7 @@
       <button class="btn ghost" id="nextBtn">Next word →</button>
       <button class="btn" id="openBtn">Open this word</button>
     </div>
+    <div class="box" id="androidCard" style="margin:-8px 0 24px"></div>
   </section>
 
   <!-- SEARCH TAB -->
@@ -267,9 +269,19 @@ const PACKS = [
 ];
 
 /* storage: may be unavailable in some contexts, so always wrap */
+/* inside the Android app, window.ChirariAndroid is the native bridge (storage for the widget, audio) */
+const NATIVE = (typeof window.ChirariAndroid !== "undefined") ? window.ChirariAndroid : null;
+const APK_URL = "https://github.com/robiii7369-gif/chirari/releases/download/apk/chirari.apk";
 const store = {
-  get(k, d){ try{ const v = localStorage.getItem("chirari:"+k); return v===null ? d : JSON.parse(v); }catch(e){ return d; } },
-  set(k, v){ try{ localStorage.setItem("chirari:"+k, JSON.stringify(v)); }catch(e){} }
+  get(k, d){
+    try{ const v = localStorage.getItem("chirari:"+k); if(v !== null) return JSON.parse(v); }catch(e){}
+    try{ if(NATIVE){ const n = NATIVE.getItem("chirari:"+k); if(n) return JSON.parse(n); } }catch(e){}
+    return d;
+  },
+  set(k, v){
+    try{ localStorage.setItem("chirari:"+k, JSON.stringify(v)); }catch(e){}
+    try{ if(NATIVE) NATIVE.setItem("chirari:"+k, JSON.stringify(v)); }catch(e){}
+  }
 };
 
 const state = {
@@ -300,6 +312,7 @@ function pickVoice(){
 }
 if("speechSynthesis" in window){ pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
 function speak(text){
+  if(NATIVE){ try{ NATIVE.speak(text); return; }catch(e){} }
   if(!("speechSynthesis" in window)){ toast("Audio isn't supported in this browser"); return; }
   speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(text);
@@ -503,7 +516,15 @@ document.addEventListener("keydown", e => { if(e.key === "Escape") closeSheet();
 state.idx = Math.floor(Math.random() * 1000);
 tickClock(); setInterval(tickClock, 15000);
 renderBadge(); applyLang(); setDemo(true);
-if(!state.lang) openOb();
+$("#androidCard").innerHTML = NATIVE
+  ? `<div class="lbl"><span>Your real widget</span></div><div style="font-size:14px;line-height:1.6">Long-press your home screen → <b>Widgets</b> → <b>Chirari</b>, and drag it onto your home screen. It shows a new word every hour. Tap <b>›</b> on the widget for the next word.</div>`
+  : `<div class="lbl"><span>Android app (test version)</span></div><div style="font-size:14px;line-height:1.6;margin-bottom:10px">Get the real home-screen widget on your Android phone.</div><a class="btn" style="display:block;text-align:center;text-decoration:none" href="${APK_URL}">📲 Download for Android</a><div style="font-size:12px;color:var(--muted);margin-top:8px">Android asks before installing apps from outside the Play Store. iPhone: keep using this page.</div>`;
+function openFromHash(){
+  const m = /[#&]w=(\d+)/.exec(location.hash || "");
+  if(m && state.lang && byId(+m[1])) openWord(+m[1]);
+}
+if(!state.lang) openOb(); else openFromHash();
+window.addEventListener("hashchange", openFromHash);
 </script>
 </body>
 </html>

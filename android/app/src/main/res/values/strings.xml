@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Chirari</string>
+    <string name="widget_name">Chirari word</string>
+    <string name="widget_desc">One Japanese word for work and daily life, every hour.</string>
+</resources>
