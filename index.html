@@ -74,6 +74,14 @@
   .tile.photo-empty .p-ic{font-size:26px}
   .tile.photo-empty .p-t{font-weight:800;font-size:13px;margin-top:4px}
   .tile.photo-empty .p-s{font-size:11px;opacity:.8}
+  .lockrow{display:flex;align-items:center;gap:14px;margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
+  .lockrow .lt{flex:1;font-size:14px;line-height:1.5}
+  .lockrow .lt b{display:block;font-size:15px}
+  .lockrow .lt span{color:var(--muted);font-size:12.5px}
+  .switch{flex:none;width:52px;height:32px;border-radius:999px;border:0;background:#D6D0C4;position:relative;transition:background .2s}
+  .switch::after{content:"";position:absolute;left:3px;top:3px;width:26px;height:26px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .2s}
+  .switch[aria-checked="true"]{background:var(--nori2)}
+  .switch[aria-checked="true"]::after{transform:translateX(20px)}
   .settings-note{font-size:12.5px;color:var(--muted);line-height:1.6;margin:0 0 10px}
   .screen .hint{position:absolute;bottom:22px;font-size:12px;opacity:.7}
 
@@ -623,9 +631,17 @@ document.addEventListener("keydown", e => { if(e.key === "Escape") closeSheet();
 state.idx = Math.floor(Math.random() * 1000);
 tickClock(); setInterval(tickClock, 15000);
 renderBadge(); applyLang(); applyBg(); setDemo(true);
+const HAS_LOCK = !!(NATIVE && typeof NATIVE.setLockWord === "function"); // older app versions don't have it
 $("#androidCard").innerHTML = NATIVE
   ? `<div class="lbl"><span>Your real widget</span></div><div style="font-size:14px;line-height:1.6">Long-press your home screen → <b>Widgets</b> → <b>Chirari</b>, and drag it onto your home screen. It shows a new word every hour. Tap <b>›</b> on the widget for the next word.</div>`
+    + (HAS_LOCK ? `<div class="lockrow"><div class="lt"><b>🔒 Word on lock screen</b><span>See your word every time you pick up your phone. Silent, no pop-ups. 🔊 to hear it, › for the next one.</span></div><button class="switch" id="lockSw" role="switch" aria-checked="false" aria-label="Word on lock screen"></button></div>` : "")
   : `<div class="lbl"><span>Android app (test version)</span></div><div style="font-size:14px;line-height:1.6;margin-bottom:10px">Get the real home-screen widget on your Android phone.</div><a class="btn" style="display:block;text-align:center;text-decoration:none" href="${APK_URL}">📲 Download for Android</a><div style="font-size:12px;color:var(--muted);margin-top:8px">Android asks before installing apps from outside the Play Store. iPhone: keep using this page.</div>`;
+if(HAS_LOCK){
+  const sw = $("#lockSw");
+  try{ sw.setAttribute("aria-checked", NATIVE.isLockWordOn() ? "true" : "false"); }catch(e){}
+  sw.onclick = () => { try{ NATIVE.setLockWord(sw.getAttribute("aria-checked") !== "true"); }catch(e){ toast("Couldn't change this setting"); } };
+  window.onLockWord = on => sw.setAttribute("aria-checked", on ? "true" : "false");
+}
 function openFromHash(){
   const m = /[#&]w=(\d+)/.exec(location.hash || "");
   if(m && state.lang && byId(+m[1])){

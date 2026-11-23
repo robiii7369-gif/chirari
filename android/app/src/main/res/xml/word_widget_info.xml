@@ -11,4 +11,4 @@
     android:initialLayout="@layout/widget_word"
     android:previewLayout="@layout/widget_word"
     android:description="@string/widget_desc"
-    android:widgetCategory="home_screen" />
+    android:widgetCategory="home_screen|keyguard" />

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- status-bar icon: an onigiri with a nori band (white only; Android tints it) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#FFFFFF" android:fillType="evenOdd"
+        android:pathData="M10.3,3.9 C11.1,2.6 12.9,2.6 13.7,3.9 L21.3,17.6 C22,18.9 21.1,20.5 19.6,20.5 L4.4,20.5 C2.9,20.5 2,18.9 2.7,17.6 Z M9.2,14 L14.8,14 L14.8,20.5 L9.2,20.5 Z" />
+</vector>

@@ -2,6 +2,9 @@ package io.github.robiii7369.chirari;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.NotificationManager;
+import android.content.pm.PackageManager;
+import android.provider.Settings;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -37,6 +40,8 @@ public class MainActivity extends Activity {
     static final String EXTRA_WORD_ID = "wordId";
     static final String EXTRA_SPEAK = "speak";
     private static final int PICK_PHOTO = 7;
+    private static final int ASK_NOTIFICATIONS = 8;
+    private static final String NOTIFY_PERMISSION = "android.permission.POST_NOTIFICATIONS";
 
     private WebView web;
     private TextToSpeech tts;
@@ -97,6 +102,8 @@ public class MainActivity extends Activity {
                 pendingSpeech = null;
             }
         });
+
+        LockWord.schedule(this);
 
         Intent i = getIntent();
         int wordId = i.getIntExtra(EXTRA_WORD_ID, -1);
@@ -185,6 +192,59 @@ public class MainActivity extends Activity {
 
     private void showVoiceTip() {
         Toast.makeText(this, "Install a Japanese voice: Settings → Text-to-speech", Toast.LENGTH_LONG).show();
+    }
+
+    // ---------------------------------------------------------------- word on lock screen
+
+    private void setLockWord(boolean on) {
+        if (!on) {
+            LockWord.setOn(this, false);
+            tellPage(false);
+            return;
+        }
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(NOTIFY_PERMISSION) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{NOTIFY_PERMISSION}, ASK_NOTIFICATIONS); // Android asks the user
+            return;
+        }
+        turnLockWordOn();
+    }
+
+    private void turnLockWordOn() {
+        NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+        if (!nm.areNotificationsEnabled()) {
+            openNotificationSettings();
+            tellPage(false);
+            return;
+        }
+        LockWord.setOn(this, true);
+        tellPage(true);
+        Toast.makeText(this, "Lock your phone to see your word 🔒", Toast.LENGTH_LONG).show();
+    }
+
+    private void openNotificationSettings() {
+        Toast.makeText(this, "Turn on notifications for Chirari, then try again", Toast.LENGTH_LONG).show();
+        try {
+            startActivity(new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                    .putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName()));
+        } catch (Exception ignored) { }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
+        super.onRequestPermissionsResult(requestCode, permissions, results);
+        if (requestCode != ASK_NOTIFICATIONS) return;
+        if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) {
+            turnLockWordOn();
+        } else {
+            if (Build.VERSION.SDK_INT >= 33 && !shouldShowRequestPermissionRationale(NOTIFY_PERMISSION)) {
+                openNotificationSettings(); // the user said "don't ask again" earlier
+            }
+            tellPage(false);
+        }
+    }
+
+    private void tellPage(boolean on) {
+        if (web != null) web.evaluateJavascript("window.onLockWord && window.onLockWord(" + on + ")", null);
     }
 
     // ---------------------------------------------------------------- photo background
@@ -324,6 +384,16 @@ public class MainActivity extends Activity {
                     Toast.makeText(MainActivity.this, "No photo app found", Toast.LENGTH_LONG).show();
                 }
             });
+        }
+
+        @JavascriptInterface
+        public boolean isLockWordOn() {
+            return LockWord.isOn(MainActivity.this);
+        }
+
+        @JavascriptInterface
+        public void setLockWord(boolean on) {
+            runOnUiThread(() -> MainActivity.this.setLockWord(on));
         }
 
         @JavascriptInterface

@@ -26,6 +26,7 @@ import java.util.Locale;
  */
 public class WordWidget extends AppWidgetProvider {
     static final String ACTION_NEXT = "io.github.robiii7369.chirari.NEXT_WORD";
+    static final String ACTION_TICK = "io.github.robiii7369.chirari.HOURLY";
     private static final long HOUR_MS = 60L * 60L * 1000L;
 
     /** Background design: drawable + whether it is light (needs dark text). */
@@ -57,6 +58,12 @@ public class WordWidget extends AppWidgetProvider {
             updateAll(context);
             return;
         }
+        String a = intent.getAction();
+        if (ACTION_TICK.equals(a) || Intent.ACTION_BOOT_COMPLETED.equals(a) || Intent.ACTION_MY_PACKAGE_REPLACED.equals(a)) {
+            if (!ACTION_TICK.equals(a)) LockWord.schedule(context); // alarms are cleared by a restart
+            updateAll(context);
+            return;
+        }
         super.onReceive(context, intent);
     }
 
@@ -65,6 +72,7 @@ public class WordWidget extends AppWidgetProvider {
         AppWidgetManager manager = AppWidgetManager.getInstance(context);
         int[] ids = manager.getAppWidgetIds(new ComponentName(context, WordWidget.class));
         for (int id : ids) draw(context, manager, id);
+        LockWord.refresh(context);
     }
 
     static Words.Word currentWord(Context context) {
@@ -75,7 +83,7 @@ public class WordWidget extends AppWidgetProvider {
     }
 
     /** Mark text as Japanese so kanji use Japanese letter shapes even when the phone is set to English. */
-    private static SpannableString japanese(String text) {
+    static SpannableString japanese(String text) {
         SpannableString s = new SpannableString(text);
         s.setSpan(new LocaleSpan(Locale.JAPAN), 0, text.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         return s;
@@ -153,7 +161,7 @@ public class WordWidget extends AppWidgetProvider {
     }
 
     /** Opens the app on this word; with speak=true it also plays the word. */
-    private static PendingIntent openIntent(Context context, int wordId, boolean speak) {
+    static PendingIntent openIntent(Context context, int wordId, boolean speak) {
         Intent open = new Intent(context, MainActivity.class);
         open.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         if (wordId > 0) open.putExtra(MainActivity.EXTRA_WORD_ID, wordId);
