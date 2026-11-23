@@ -36,8 +36,13 @@ jobs:
         working-directory: android
         run: gradle assembleDebug --no-daemon --stacktrace
 
-      - name: Rename
-        run: cp android/app/build/outputs/apk/debug/app-debug.apk chirari.apk
+      - name: Rename, and write the version number the app checks for updates
+        run: |
+          cp android/app/build/outputs/apk/debug/app-debug.apk chirari.apk
+          code=$(grep -oP 'versionCode \K[0-9]+' android/app/build.gradle)
+          name=$(grep -oP "versionName '\K[^']+" android/app/build.gradle)
+          echo "{\"versionCode\": $code, \"versionName\": \"$name\"}" > version.json
+          cat version.json
 
       - uses: actions/upload-artifact@v4
         with:
@@ -52,5 +57,7 @@ jobs:
           body: |
             Test version of Chirari with a real home-screen widget.
             Download chirari.apk on an Android phone and allow the install when asked.
-          files: chirari.apk
+          files: |
+            chirari.apk
+            version.json
           make_latest: true

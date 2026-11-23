@@ -1,6 +1,7 @@
 package io.github.robiii7369.chirari;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -35,7 +36,6 @@ import java.util.Locale;
 public class MainActivity extends Activity {
     static final String EXTRA_WORD_ID = "wordId";
     static final String EXTRA_SPEAK = "speak";
-    private static final String START_URL = "file:///android_asset/index.html";
     private static final int PICK_PHOTO = 7;
 
     private WebView web;
@@ -44,6 +44,7 @@ public class MainActivity extends Activity {
     private boolean japaneseMissing = false;
     private String pendingSpeech = null;
     private volatile String photoThumbCache = null;
+    private boolean updateOffered = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -66,6 +67,7 @@ public class MainActivity extends Activity {
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
         s.setTextZoom(100);
+        s.setAllowFileAccess(true); // needed to open the downloaded (live-updated) copy of the app page
 
         web.addJavascriptInterface(new Bridge(), "ChirariAndroid");
         web.setWebViewClient(new WebViewClient() {
@@ -99,7 +101,7 @@ public class MainActivity extends Activity {
         Intent i = getIntent();
         int wordId = i.getIntExtra(EXTRA_WORD_ID, -1);
         boolean speak = i.getBooleanExtra(EXTRA_SPEAK, false);
-        String url = START_URL;
+        String url = Updater.pageUrl(this);
         if (wordId > 0) url += "#w=" + wordId + (speak ? "&say=1" : "");
         web.loadUrl(url);
     }
@@ -126,6 +128,46 @@ public class MainActivity extends Activity {
                 value -> {
                     if (!"1".equals(value)) super.onBackPressed();
                 });
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        checkForUpdates();
+    }
+
+    /** Live update: new screens and words load by themselves; a new Android version shows an Update button. */
+    private void checkForUpdates() {
+        if (!Updater.dueForCheck(this)) return;
+        new Thread(() -> {
+            boolean pageChanged = Updater.fetchPage(this);
+            int latest = Updater.latestVersionCode();
+            runOnUiThread(() -> {
+                if (isFinishing() || web == null) return;
+                if (pageChanged) {
+                    WordWidget.updateAll(this);
+                    // Reload now unless the user is looking at a word; otherwise it applies next time
+                    web.evaluateJavascript(
+                            "(function(){var s=document.getElementById('sheet');return s&&s.classList.contains('open')?1:0;})()",
+                            open -> {
+                                if (!"1".equals(open)) {
+                                    web.loadUrl(Updater.pageUrl(this));
+                                    Toast.makeText(this, "Chirari updated ✓", Toast.LENGTH_SHORT).show();
+                                }
+                            });
+                }
+                if (latest > Updater.installedVersionCode(this) && !updateOffered) {
+                    updateOffered = true;
+                    new AlertDialog.Builder(this)
+                            .setTitle("New version of Chirari")
+                            .setMessage("A new version is ready. Tap Update, then tap Install when Android asks. Your words and settings stay.")
+                            .setPositiveButton("Update", (d, w) ->
+                                    startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(Updater.APK_URL))))
+                            .setNegativeButton("Later", null)
+                            .show();
+                }
+            });
+        }).start();
     }
 
     @Override

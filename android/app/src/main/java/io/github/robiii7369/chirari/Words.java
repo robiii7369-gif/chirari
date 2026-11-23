@@ -7,9 +7,6 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import org.json.JSONTokener;
 
-import java.io.ByteArrayOutputStream;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -17,7 +14,8 @@ import java.util.Map;
 
 /**
  * Reads the word list straight out of assets/index.html (the same file as the web app),
- * so the widget and the app always use the same 230 words.
+ * so the widget and the app always use the same words.
+ * When a live update has been downloaded, that newer copy is used instead (see Updater).
  */
 final class Words {
     static final String PREFS = "chirari";
@@ -36,16 +34,21 @@ final class Words {
     private static List<Word> cache;
 
     static synchronized List<Word> all(Context ctx) {
-        if (cache != null) return cache;
+        if (cache == null) cache = parse(Updater.readPage(ctx));
+        return cache;
+    }
+
+    /** Forget the loaded words, e.g. after a live update downloaded a new word list. */
+    static synchronized void reset() {
+        cache = null;
+    }
+
+    /** Pulls the WORDS list out of the web app's HTML. Returns an empty list if it can't. */
+    static List<Word> parse(String html) {
         List<Word> list = new ArrayList<>();
-        try (InputStream in = ctx.getAssets().open("index.html")) {
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-            byte[] buf = new byte[16384];
-            int n;
-            while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
-            String html = new String(out.toByteArray(), StandardCharsets.UTF_8);
+        try {
             String marker = "const WORDS = ";
-            int start = html.indexOf(marker);
+            int start = html == null ? -1 : html.indexOf(marker);
             if (start >= 0) {
                 JSONArray arr = (JSONArray) new JSONTokener(html.substring(start + marker.length())).nextValue();
                 for (int i = 0; i < arr.length(); i++) {
@@ -62,9 +65,8 @@ final class Words {
                 }
             }
         } catch (Exception e) {
-            // keep an empty list; the widget shows a friendly message instead
+            list.clear(); // the widget shows a friendly message instead
         }
-        cache = list;
         return list;
     }
 
